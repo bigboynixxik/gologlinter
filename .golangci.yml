@@ -1,6 +1,13 @@
+version: "2"
+
 linters-settings:
   custom:
     loglinter:
       path: plugin.so
       description: The linter for checking log messages
-      original-url: github.com:bigboynixxik/gologlinter.git
+      original-url: github.com/bigboynixxik/gologlinter.git
+
+linters:
+  disable-all: true
+  enable:
+    - loglinter
