@@ -10,13 +10,21 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+var sensitiveWords string
+
 var Analyzer = &analysis.Analyzer{
-	Name: "logLinter",
+	Name: "loglinter",
 	Doc:  "checks log messages for specific rules",
 	Run:  run,
 }
 
+func init() {
+	Analyzer.Flags.StringVar(&sensitiveWords, "sensitive", "password,api_key,token", "comma-separated sensitive words")
+}
+
 func run(pass *analysis.Pass) (interface{}, error) {
+	badWords := strings.Split(sensitiveWords, ",")
+
 	for _, file := range pass.Files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -31,14 +39,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				return true
 			}
 
-			callFirst, ok := call.Args[0].(*ast.BasicLit)
-			if !ok {
-				return true
-			}
-			if callFirst.Kind != token.STRING {
-				return true
-			}
-
 			obj := pass.TypesInfo.Uses[selExpFun.Sel]
 			if obj == nil {
 				return true
@@ -47,9 +47,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			if pkg == nil {
 				return true
 			}
-			if pkg.Path() == "log/slog" || pkg.Path() == "go.uber.org/zap" {
-				badWords := []string{"password", "api_key", "token"}
 
+			if pkg.Path() == "log/slog" || pkg.Path() == "go.uber.org/zap" {
 				ast.Inspect(call, func(nn ast.Node) bool {
 					var textToCheck string
 					switch x := nn.(type) {
@@ -64,30 +63,48 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					if textToCheck != "" {
 						lowerText := strings.ToLower(textToCheck)
 						for _, w := range badWords {
-							if strings.Contains(lowerText, w) {
-								pass.Reportf(nn.Pos(), "log message contains sensitive data")
+							if strings.Contains(lowerText, strings.TrimSpace(w)) {
+								pass.Reportf(call.Pos(), "log message contains sensitive data")
 								return false
 							}
 						}
 					}
 					return true
 				})
+
+				callFirst, ok := call.Args[0].(*ast.BasicLit)
+				if !ok || callFirst.Kind != token.STRING {
+					return true
+				}
+
 				msg, err := strconv.Unquote(callFirst.Value)
-				if err != nil {
+				if err != nil || len(msg) == 0 {
 					return true
 				}
-				if len(msg) == 0 {
-					return true
-				}
+
 				runesMsg := []rune(msg)
+
 				if unicode.IsUpper(runesMsg[0]) {
-					pass.Reportf(callFirst.Pos(), "log message must start with a lowercase letter")
-					return true
+
+					runesMsg[0] = unicode.ToLower(runesMsg[0])
+					fixedString := strconv.Quote(string(runesMsg))
+
+					pass.Report(analysis.Diagnostic{
+						Pos:     callFirst.Pos(),
+						Message: "log message must start with a lowercase letter",
+						SuggestedFixes: []analysis.SuggestedFix{{
+							Message: "Make lowercase",
+							TextEdits: []analysis.TextEdit{{
+								Pos:     callFirst.Pos(),
+								End:     callFirst.End(),
+								NewText: []byte(fixedString),
+							}},
+						}},
+					})
 				}
 				if !isValidLogText(runesMsg) {
 					pass.Reportf(callFirst.Pos(), "log message must contain only English letters, spaces, and digits")
 				}
-
 			}
 			return true
 		})
@@ -97,7 +114,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 func isValidLogText(msg []rune) bool {
 	for _, r := range msg {
-		if unicode.Is(unicode.Latin, r) || unicode.Is(unicode.Space, r) || unicode.Is(unicode.Digit, r) {
+		if unicode.Is(unicode.Latin, r) || unicode.IsSpace(r) || unicode.IsDigit(r) {
 			continue
 		}
 		return false
