@@ -49,7 +49,13 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			}
 
 			if pkg.Path() == "log/slog" || pkg.Path() == "go.uber.org/zap" {
+				reportedSensitive := false
+
 				ast.Inspect(call, func(nn ast.Node) bool {
+					if reportedSensitive {
+						return false
+					}
+
 					var textToCheck string
 					switch x := nn.(type) {
 					case *ast.BasicLit:
@@ -63,8 +69,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					if textToCheck != "" {
 						lowerText := strings.ToLower(textToCheck)
 						for _, w := range badWords {
-							if strings.Contains(lowerText, strings.TrimSpace(w)) {
+							w = strings.TrimSpace(w)
+							if w != "" && strings.Contains(lowerText, w) {
 								pass.Reportf(call.Pos(), "log message contains sensitive data")
+								reportedSensitive = true
 								return false
 							}
 						}
@@ -85,7 +93,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				runesMsg := []rune(msg)
 
 				if unicode.IsUpper(runesMsg[0]) {
-
 					runesMsg[0] = unicode.ToLower(runesMsg[0])
 					fixedString := strconv.Quote(string(runesMsg))
 
@@ -102,6 +109,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 						}},
 					})
 				}
+
 				if !isValidLogText(runesMsg) {
 					pass.Reportf(callFirst.Pos(), "log message must contain only English letters, spaces, and digits")
 				}

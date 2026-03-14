@@ -2,5 +2,5 @@ linters-settings:
   custom:
     loglinter:
       path: plugin.so
-      description: My custom log linter
+      description: The linter for checking log messages
       original-url: github.com:bigboynixxik/gologlinter.git
