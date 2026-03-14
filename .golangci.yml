@@ -1,0 +1,6 @@
+linters-settings:
+  custom:
+    loglinter:
+      path: plugin.so
+      description: My custom log linter
+      original-url: github.com:bigboynixxik/gologlinter.git
