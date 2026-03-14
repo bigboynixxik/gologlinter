@@ -18,3 +18,5 @@
 ## Как собрать плагин
 ```bash
 go build -buildmode=plugin -o plugin.so plugin/plugin.go
+```
+#### Примечание: Сборка плагина через ```-buildmode=plugin``` поддерживается только на Linux и macOS. Для проверки на Windows рекомендуется использовать unit-тесты (go test ./...)."
